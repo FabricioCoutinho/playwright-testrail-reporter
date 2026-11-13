@@ -218,7 +218,7 @@ describe('TestRailReporter', () => {
 
     it('sends the result payload to TestRail', async () => {
       process.env.TESTRAIL_RUN_ID = '123'
-      process.env.TESTRAIL_CUSTOM_ENVIRONMENT = 'staging'
+      process.env.TESTRAIL_CR_ENVIRONMENT = 'staging'
 
       reporter.onTestEnd(
         { title: 'Test C123' } as TestCase,
@@ -235,7 +235,7 @@ describe('TestRailReporter', () => {
           expect.objectContaining({
             case_id: 123,
             status_id: 1,
-            custom_environment: 'staging'
+            custom_result_environment: 'staging'
           })
         ])
       )

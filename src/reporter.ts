@@ -212,7 +212,7 @@ function getCustomFields(): Record<string, string> {
 
 	Object.keys(process.env).forEach(key => {
 		if (key.startsWith('TESTRAIL_CR_')) {
-			const fieldName = key.toLowerCase().replace('testrail_cr_', 'custom_result_')
+			const fieldName = key.replace('TESTRAIL_CR_', 'custom_result_').toLowerCase()
 			customFields[fieldName] = sanitizeEnvVar(process.env[key] || '')
 		}
 	})
@@ -264,13 +264,9 @@ export class TestRailReporter implements Reporter {
 					case_id: testId,
 					status_id: statusId || 5, // Fallback to failed status if unknown
 					comment: testComment,
-					custom_result_environment: 'custom_result_environment',
-					custom_environment: 'custom_environment',
-					environment: 'environment'
-					// ...customFields
+					// custom_result_environment: 'custom_result_environment',
+					...customFields
 				}
-
-				console.log("Payload for TestRail:", payload)
 
 				testResults.push(payload)
 			})
