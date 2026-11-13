@@ -212,7 +212,7 @@ function getCustomFields(): Record<string, string> {
 
 	Object.keys(process.env).forEach(key => {
 		if (key.startsWith('TESTRAIL_CR_')) {
-			const fieldName = key.toLowerCase().replace('testrail_', 'custom_result_')
+			const fieldName = key.toLowerCase().replace('testrail_cr_', '')
 			customFields[fieldName] = sanitizeEnvVar(process.env[key] || '')
 		}
 	})
@@ -266,6 +266,8 @@ export class TestRailReporter implements Reporter {
 					comment: testComment,
 					...customFields
 				}
+
+				console.log("Payload for TestRail:", payload)
 
 				testResults.push(payload)
 			})
