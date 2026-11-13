@@ -211,8 +211,8 @@ function getCustomFields(): Record<string, string> {
 	const customFields: Record<string, string> = {}
 
 	Object.keys(process.env).forEach(key => {
-		if (key.startsWith('TESTRAIL_CUSTOM_')) {
-			const fieldName = key.toLowerCase().replace('testrail_', '')
+		if (key.startsWith('TESTRAIL_CR_')) {
+			const fieldName = key.toLowerCase().replace('testrail_', 'custom_result_')
 			customFields[fieldName] = sanitizeEnvVar(process.env[key] || '')
 		}
 	})
