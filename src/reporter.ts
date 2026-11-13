@@ -264,7 +264,10 @@ export class TestRailReporter implements Reporter {
 					case_id: testId,
 					status_id: statusId || 5, // Fallback to failed status if unknown
 					comment: testComment,
-					...customFields
+					custom_result_environment: 'custom_result_environment',
+					custom_environment: 'custom_environment',
+					environment: 'environment'
+					// ...customFields
 				}
 
 				console.log("Payload for TestRail:", payload)
