@@ -260,6 +260,8 @@ export class TestRailReporter implements Reporter {
 				}
 
 				const customFields = getCustomFields()
+
+				console.log("Custom fields for TestRail payload:", customFields)
 				const payload: TestResultPayload = {
 					case_id: testId,
 					status_id: statusId || 5, // Fallback to failed status if unknown
@@ -267,6 +269,8 @@ export class TestRailReporter implements Reporter {
 					// custom_result_environment: 'custom_result_environment',
 					...customFields
 				}
+
+				console.log("Payload for TestRail:", payload)
 
 				testResults.push(payload)
 			})
