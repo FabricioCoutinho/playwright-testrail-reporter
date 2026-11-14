@@ -65,9 +65,9 @@ describe('TestRailReporter', () => {
       process.env.TESTRAIL_PASSWORD = 'legacy-password'
       delete process.env.TESTRAIL_API_KEY
       process.env.TESTRAIL_RUN_ID = '123'
-      
+
       await reporter.onBegin?.({} as any, {} as any)
-      
+
       expect(mockLogger).toHaveBeenCalledWith(
         '⚠️  DEPRECATION WARNING: TESTRAIL_PASSWORD is deprecated. Please rename it to TESTRAIL_API_KEY for better clarity.'
       )
@@ -76,9 +76,9 @@ describe('TestRailReporter', () => {
     it('should not show deprecation warning when using TESTRAIL_API_KEY', async () => {
       process.env.TESTRAIL_API_KEY = 'new-api-key'
       process.env.TESTRAIL_RUN_ID = '123'
-      
+
       await reporter.onBegin?.({} as any, {} as any)
-      
+
       expect(mockLogger).not.toHaveBeenCalledWith(
         expect.stringContaining('DEPRECATION WARNING')
       )
@@ -96,7 +96,7 @@ describe('TestRailReporter', () => {
       } catch (e) {
         // Expected to fail due to API call, but we should still see the log message
       }
-      
+
       expect(mockLogger).toHaveBeenCalledWith(
         'ℹ️  No existing \'TESTRAIL_RUN_ID\' provided by user. Creating a new TestRail run with all available test cases...'
       )
@@ -104,9 +104,9 @@ describe('TestRailReporter', () => {
 
     it('should log success message when using existing TESTRAIL_RUN_ID', async () => {
       process.env.TESTRAIL_RUN_ID = '456'
-      
+
       await reporter.onBegin?.({} as any, {} as any)
-      
+
       expect(mockLogger).toHaveBeenCalledWith(
         '✅ Using existing Test Run with ID 456'
       )
@@ -116,12 +116,12 @@ describe('TestRailReporter', () => {
   describe('Skipped Test Handling', () => {
     it('should warn when skipped test found but TESTRAIL_STATUS_SKIPPED not configured', () => {
       delete process.env.TESTRAIL_STATUS_SKIPPED
-      
+
       const testCase = { title: 'Test C123' } as TestCase
       const testResult = { status: 'skipped', duration: 100 } as TestResult
-      
+
       reporter.onTestEnd(testCase, testResult)
-      
+
       expect(mockLogger).toHaveBeenCalledWith(
         '⚠️ Detected skipped test case 123 but TESTRAIL_STATUS_SKIPPED environment variable is not configured. Cannot update TestRail with skipped status.'
       )
@@ -133,13 +133,13 @@ describe('TestRailReporter', () => {
     it('should handle skipped test when TESTRAIL_STATUS_SKIPPED is configured', () => {
       // This test demonstrates that the skipped status handling works
       // In practice, the TESTRAIL_STATUS_SKIPPED would be set before the module loads
-      
+
       const testCase = { title: 'Test C123' } as TestCase
       const testResult = { status: 'passed', duration: 100 } as TestResult
-      
+
       // Test with a passed test instead of skipped to avoid the env var issue
       reporter.onTestEnd(testCase, testResult)
-      
+
       // Should not show the skipped warning for passed tests
       expect(mockLogger).not.toHaveBeenCalledWith(
         expect.stringContaining('TESTRAIL_STATUS_SKIPPED environment variable is not configured')
@@ -151,7 +151,7 @@ describe('TestRailReporter', () => {
     it('should use custom status IDs from environment variables', () => {
       process.env.TESTRAIL_STATUS_FAILED = '10'
       process.env.TESTRAIL_STATUS_PASSED = '20'
-      
+
       // Need to re-import the module after setting env vars for this test
       // This is a limitation of the current test setup
     })
@@ -161,26 +161,26 @@ describe('TestRailReporter', () => {
     it('should log test completion with updated format', () => {
       const testCase = { title: 'Sample Test C123' } as TestCase
       const testResult = { status: 'passed', duration: 150 } as TestResult
-      
+
       reporter.onTestEnd(testCase, testResult)
-      
+
       expect(mockLogger).toHaveBeenCalledWith('Test completed: Sample Test C123 (passed)')
     })
 
     it('should log final results count', async () => {
       process.env.TESTRAIL_RUN_ID = '123'
-      
+
       // Add some test results first
       const testCase = { title: 'Test C123' } as TestCase
       const testResult = { status: 'passed', duration: 100 } as TestResult
       reporter.onTestEnd(testCase, testResult)
-      
+
       try {
         await reporter.onEnd({} as any)
       } catch (e) {
         // Expected to fail due to API call, but we should still see the log message
       }
-      
+
       expect(mockLogger).toHaveBeenCalledWith('📊 Updating 1 test results for TestRail Run ID: 123')
     })
   })
@@ -203,7 +203,7 @@ describe('TestRailReporter', () => {
       // Test that debug mode enables payload logging
       const originalDebug = process.env.DEBUG
       process.env.DEBUG = 'true'
-      
+
       const payload = [
         { case_id: 123, status_id: 1, comment: "Test passed" }
       ]
@@ -211,9 +211,34 @@ describe('TestRailReporter', () => {
       // Verify debug mode is set
       expect(process.env.DEBUG).toBe('true')
       expect(Array.isArray(payload)).toBe(true)
-      
+
       // Restore original DEBUG setting
       process.env.DEBUG = originalDebug
+    })
+
+    it('sends the result payload to TestRail', async () => {
+      process.env.TESTRAIL_RUN_ID = '123'
+      process.env.TESTRAIL_CR_ENVIRONMENT = 'staging'
+
+      reporter.onTestEnd(
+        { title: 'Test C123' } as TestCase,
+        { status: 'passed', duration: 100 } as TestResult
+      )
+      await reporter.onEnd({} as any)
+
+      const TestRailMock = jest.requireMock('testrail-api-client').default as jest.Mock
+      const api = TestRailMock.mock.results[TestRailMock.mock.results.length - 1].value
+
+      expect(api.addResultsForCases).toHaveBeenCalledWith(
+        123,
+        expect.arrayContaining([
+          expect.objectContaining({
+            case_id: 123,
+            status_id: 1,
+            custom_result_environment: 'staging'
+          })
+        ])
+      )
     })
   })
 });

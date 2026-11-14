@@ -22,23 +22,23 @@ const StatusMap = new Map<string, number>([
  */
 function sanitizeEnvVar(value: string | undefined): string {
 	if (!value) return ''
-	
+
 	let cleaned = value.trim()
-	
+
 	// Remove surrounding single or double quotes (including nested quotes)
 	cleaned = cleaned.replace(/^['"]|['"]$/g, '').trim()
-	
+
 	// Handle nested quotes like "'value'" -> value
-	if ((cleaned.startsWith("'") && cleaned.endsWith("'")) || 
+	if ((cleaned.startsWith("'") && cleaned.endsWith("'")) ||
 	    (cleaned.startsWith('"') && cleaned.endsWith('"'))) {
 		cleaned = cleaned.slice(1, -1).trim()
 	}
-	
+
 	// Remove extra trailing slashes from URLs
 	if (cleaned.includes('://') && cleaned.endsWith('//')) {
 		cleaned = cleaned.replace(/\/+$/, '')
 	}
-	
+
 	return cleaned
 }
 
@@ -48,15 +48,15 @@ function sanitizeEnvVar(value: string | undefined): string {
 function validateEnvironmentVariables(): void {
 	const requiredVars = [
 		'TESTRAIL_HOST',
-		'TESTRAIL_USERNAME', 
+		'TESTRAIL_USERNAME',
 		'TESTRAIL_PROJECT_ID',
 		'TESTRAIL_SUITE_ID'
 	]
-	
+
 	const missingVars: string[] = []
 	const invalidVars: string[] = []
 	const warnings: string[] = []
-	
+
 	// Check for missing required variables
 	for (const varName of requiredVars) {
 		const value = sanitizeEnvVar(process.env[varName])
@@ -64,7 +64,7 @@ function validateEnvironmentVariables(): void {
 			missingVars.push(varName)
 		}
 	}
-	
+
 	// Validate TESTRAIL_HOST
 	const host = sanitizeEnvVar(process.env.TESTRAIL_HOST || '')
 	if (host) {
@@ -82,7 +82,7 @@ function validateEnvironmentVariables(): void {
 		}
 		// Note: Extra trailing slashes are now automatically cleaned by sanitizeEnvVar
 	}
-	
+
 	// Validate USERNAME
 	const username = sanitizeEnvVar(process.env.TESTRAIL_USERNAME || '')
 	if (username) {
@@ -92,7 +92,7 @@ function validateEnvironmentVariables(): void {
 			warnings.push('TESTRAIL_USERNAME typically should be an email address')
 		}
 	}
-	
+
 	// Validate API KEY/PASSWORD
 	const apiKey = sanitizeEnvVar(process.env.TESTRAIL_API_KEY) || sanitizeEnvVar(process.env.TESTRAIL_PASSWORD)
 	if (apiKey) {
@@ -102,11 +102,11 @@ function validateEnvironmentVariables(): void {
 			warnings.push('TESTRAIL_API_KEY/PASSWORD seems unusually short - verify it\'s correct')
 		}
 	}
-	
+
 	// Check for invalid numeric values
 	const projectIdStr = sanitizeEnvVar(process.env.TESTRAIL_PROJECT_ID) || '0'
 	const suiteIdStr = sanitizeEnvVar(process.env.TESTRAIL_SUITE_ID) || '0'
-	
+
 	// Check for common numeric mistakes
 	if (projectIdStr === 'null' || projectIdStr === 'undefined') {
 		invalidVars.push('TESTRAIL_PROJECT_ID (contains literal "null" or "undefined" - use actual number)')
@@ -120,7 +120,7 @@ function validateEnvironmentVariables(): void {
 			invalidVars.push('TESTRAIL_PROJECT_ID (must be a positive number)')
 		}
 	}
-	
+
 	if (suiteIdStr === 'null' || suiteIdStr === 'undefined') {
 		invalidVars.push('TESTRAIL_SUITE_ID (contains literal "null" or "undefined" - use actual number)')
 	} else if (suiteIdStr.includes('.')) {
@@ -133,34 +133,34 @@ function validateEnvironmentVariables(): void {
 			invalidVars.push('TESTRAIL_SUITE_ID (must be a positive number)')
 		}
 	}
-	
+
 	// Check for missing API credentials
 	if (!apiKey) {
 		missingVars.push('TESTRAIL_API_KEY or TESTRAIL_PASSWORD')
 	}
-	
+
 	// Report errors and warnings
 	if (missingVars.length > 0 || invalidVars.length > 0) {
 		logger('❌ TestRail configuration errors detected:')
-		
+
 		if (missingVars.length > 0) {
 			logger(`   Missing required variables: ${missingVars.join(', ')}`)
 		}
-		
+
 		if (invalidVars.length > 0) {
 			logger(`   Invalid values: ${invalidVars.join(', ')}`)
 		}
-		
+
 		logger('ℹ️  Please check your environment variables. Common issues:')
 		logger('   - Remove extra quotes: Use TESTRAIL_HOST=https://... not TESTRAIL_HOST="\'https://...\'"')
 		logger('   - Replace placeholder text with actual values')
 		logger('   - Ensure numeric IDs are valid positive integers')
 		logger('   - Use your actual TestRail domain (e.g., company.testrail.io)')
 		logger('   - Set all required variables listed above')
-		
+
 		throw new Error('Invalid TestRail configuration')
 	}
-	
+
 	// Show warnings (non-fatal)
 	if (warnings.length > 0) {
 		warnings.forEach(warning => logger(`⚠️  ${warning}`))
@@ -195,7 +195,30 @@ const runName = (sanitizeEnvVar(process.env.TESTRAIL_RUN_NAME) || 'Test Run') + 
 const projectId = parseInt(sanitizeEnvVar(process.env.TESTRAIL_PROJECT_ID) || '0')
 const suiteId = parseInt(sanitizeEnvVar(process.env.TESTRAIL_SUITE_ID) || '0')
 
-const testResults: Array<{case_id: number, status_id: number | undefined, comment: string}> = []
+interface TestResultPayload {
+	case_id: number
+	status_id: number | undefined
+	comment: string
+	[key: string]: string | number | undefined
+}
+
+const testResults: Array<TestResultPayload> = []
+
+/**
+ * Get all custom fields from environment variables (all vars starting with CUSTOM_)
+ */
+function getCustomFields(): Record<string, string> {
+	const customFields: Record<string, string> = {}
+
+	Object.keys(process.env).forEach(key => {
+		if (key.startsWith('TESTRAIL_CR_')) {
+			const fieldName = key.replace('TESTRAIL_CR_', 'custom_result_').toLowerCase()
+			customFields[fieldName] = sanitizeEnvVar(process.env[key] || '')
+		}
+	})
+
+	return customFields
+}
 
 export class TestRailReporter implements Reporter {
 	async onBegin?(config: FullConfig, suite: Suite) {
@@ -203,7 +226,7 @@ export class TestRailReporter implements Reporter {
 		if (process.env.TESTRAIL_PASSWORD && !process.env.TESTRAIL_API_KEY) {
 			logger("⚠️  DEPRECATION WARNING: TESTRAIL_PASSWORD is deprecated. Please rename it to TESTRAIL_API_KEY for better clarity.")
 		}
-		
+
 		if (!process.env.TESTRAIL_RUN_ID) {
 			logger("ℹ️  No existing 'TESTRAIL_RUN_ID' provided by user. Creating a new TestRail run with all available test cases...")
 			await addTestRailRun(projectId)
@@ -224,23 +247,31 @@ export class TestRailReporter implements Reporter {
 				const testId = parseInt(testCaseMatch.substring(1), 10)
 				const testComment = setTestComment(result)
 				const statusId = StatusMap.get(result.status)
-				
+
 				// Handle skipped tests when no custom status is configured
 				if (result.status === "skipped" && (!statusId || isNaN(statusId))) {
 					logger(`⚠️ Detected skipped test case ${testId} but TESTRAIL_STATUS_SKIPPED environment variable is not configured. Cannot update TestRail with skipped status.`)
 					logger(`ℹ️ To report skipped tests, set TESTRAIL_STATUS_SKIPPED to your TestRail's skipped status ID`)
 					return // Skip this result
 				}
-				
+
 				if (statusId === undefined || isNaN(statusId)) {
 					logger(`⚠️ Unknown test status '${result.status}' for case ${testId}. Using failed status as fallback.`)
 				}
-				
-				const payload = {
+
+				const customFields = getCustomFields()
+
+				console.log("Custom fields for TestRail payload:", customFields)
+				const payload: TestResultPayload = {
 					case_id: testId,
 					status_id: statusId || 5, // Fallback to failed status if unknown
-					comment: testComment
+					comment: testComment,
+					// custom_result_environment: 'custom_result_environment',
+					...customFields
 				}
+
+				console.log("Payload for TestRail:", payload)
+
 				testResults.push(payload)
 			})
 		}
@@ -285,13 +316,13 @@ async function addTestRailRun(projectId: number) {
 		const cases = await api.getCases(projectId, suiteId)
 		const caseIds = cases.map((testCase: any) => testCase.id)
 		logger(`📋 Found ${caseIds.length} test cases to add to the run`)
-		
+
 		const runId = await api.addRun(runName, "", projectId, suiteId, caseIds)
 		logger(`🎉 New TestRail run created: ${sanitizeEnvVar(process.env.TESTRAIL_HOST)}/index.php?/runs/view/${runId}`)
 		process.env.TESTRAIL_RUN_ID = runId.toString()
 	} catch (reason: any) {
 		logger(`❌ Failed to create TestRail run: ${reason.message || reason}`)
-		
+
 		// Provide helpful error messages for common issues
 		if (reason.message && reason.message.includes('Authentication failed')) {
 			logger('💡 Check your TESTRAIL_USERNAME and TESTRAIL_API_KEY/TESTRAIL_PASSWORD')
@@ -302,7 +333,7 @@ async function addTestRailRun(projectId: number) {
 		} else if (reason.code === 'ENOTFOUND' || reason.code === 'ECONNREFUSED') {
 			logger('💡 Check your TESTRAIL_HOST and network connectivity')
 		}
-		
+
 		if (reason.response && reason.response.data) {
 			logger(`❌ TestRail API Response: ${stringify(reason.response.data)}`)
 		}
@@ -323,9 +354,9 @@ function setTestComment(result: TestResult) {
 			.replace(/\\\\/g, '\\')               // Unescape backslashes
 			.replace(/\\n/g, '\n')                // Convert literal \n to newlines
 			.replace(/\\t/g, '\t')                // Convert literal \t to tabs
-		
+
 		const maxLength = 500
-		const truncatedError = cleanedError.length > maxLength 
+		const truncatedError = cleanedError.length > maxLength
 			? cleanedError.substring(0, maxLength) + "... [truncated]"
 			: cleanedError
 		return "Test Status: " + result.status + "\n" + truncatedError
@@ -350,12 +381,12 @@ async function updateResultCases(runId: number, payload: any) {
 		if (!runId || isNaN(runId)) {
 			throw new Error(`Invalid run ID: ${runId}. This usually means TestRail run creation failed earlier.`)
 		}
-		
+
 		await api.addResultsForCases(runId, payload)
 		logger(`✅ Successfully updated test results: ${sanitizeEnvVar(process.env.TESTRAIL_HOST)}/index.php?/runs/view/${runId}`)
 	} catch (reason: any) {
 		logger(`❌ Failed to update test results. Error: ${reason.message || reason}`)
-		
+
 		// Provide helpful error messages for common issues
 		if (reason.message && reason.message.includes('Invalid run ID')) {
 			logger('💡 The TestRail run was not created successfully. Check the error messages above.')
@@ -364,12 +395,12 @@ async function updateResultCases(runId: number, payload: any) {
 		} else if (reason.message && reason.message.includes('not found')) {
 			logger('💡 The TestRail run may have been deleted or you may not have access to it')
 		}
-		
+
 		// Show TestRail API response if available (usually contains specific error details)
 		if (reason.response && reason.response.data) {
 			logger(`❌ TestRail API Response: ${stringify(reason.response.data)}`)
 		}
-		
+
 		// Only show payload details in debug mode
 		if (process.env.DEBUG === 'true' && Array.isArray(payload)) {
 			logger(`🔍 Debug: Attempted to update ${payload.length} test result(s)`)

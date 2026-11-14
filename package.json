@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "build": "tsc --build tsconfig.json",
+    "prepare": "npm run build",
     "clean": "rimraf ./lib",
     "lint": "eslint -c ./eslintrc.json 'src/**/*.{ts,tsx}'",
     "lint:fix": "eslint 'src/**/*.{ts,tsx}' --fix",
